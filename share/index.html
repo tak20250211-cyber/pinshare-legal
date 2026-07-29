@@ -76,7 +76,9 @@
 // 公開されている投稿だけを、Firestoreの読み取り専用APIから取り出して表示する。
 // サーバーは持たず、GitHub Pagesなどの静的ホスティングだけで動く。
 const PROJECT_ID = "pinshare-32af1";
-const API_KEY = "AIzaSyBZovlEhCHRWvx49Ly98nnood66JO_xI_s"; // 参照専用（Firestoreルールで公開投稿のみ許可）
+// 参照専用。Firestoreルールで公開投稿のみ許可＋このキーはこのサイトからしか使えないよう制限済み。
+// アプリ用のキーとは別にしてある（アプリ用に同じ制限をかけるとアプリが動かなくなるため）
+const API_KEY = "AIzaSyCgU1XAG859W_XnBrAv7n-YgVvP4_jJFFU";
 
 const params = new URLSearchParams(location.search);
 // ?p= を正とし、?pin= / ?id= / ?route= も同じものとして受ける（リンクの書き間違い対策）
