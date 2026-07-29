@@ -79,8 +79,9 @@ const PROJECT_ID = "pinshare-32af1";
 const API_KEY = "AIzaSyBZovlEhCHRWvx49Ly98nnood66JO_xI_s"; // 参照専用（Firestoreルールで公開投稿のみ許可）
 
 const params = new URLSearchParams(location.search);
-const pinId = params.get("p") || params.get("id");
-const routeId = params.get("r");
+// ?p= を正とし、?pin= / ?id= / ?route= も同じものとして受ける（リンクの書き間違い対策）
+const pinId = params.get("p") || params.get("pin") || params.get("id");
+const routeId = params.get("r") || params.get("route");
 const content = document.getElementById("content");
 
 function esc(s){ return (s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
