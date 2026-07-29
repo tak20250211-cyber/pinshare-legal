@@ -1,0 +1,197 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PinShare</title>
+<meta name="description" content="PinShareで共有された場所">
+<meta property="og:type" content="article">
+<meta property="og:site_name" content="PinShare">
+<meta property="og:title" id="og-title" content="PinShare">
+<meta property="og:description" id="og-desc" content="PinShareで共有された場所">
+<meta property="og:image" id="og-image" content="">
+<meta name="twitter:card" content="summary_large_image">
+<style>
+  :root{
+    --bg:#0d0820; --bg2:#160f2e; --card:#1b1436; --line:#2c2350;
+    --text:#eceaff; --muted:#a49dc9;
+    --neon:#26ffd9; --indigo:#4f5cf2; --cyan:#22c7e6;
+  }
+  *{box-sizing:border-box}
+  body{
+    margin:0; padding:0; background:radial-gradient(1200px 600px at 50% -10%, var(--bg2), var(--bg));
+    color:var(--text); font-family:-apple-system,BlinkMacSystemFont,"Hiragino Sans","Noto Sans JP",sans-serif;
+    min-height:100vh;
+  }
+  .wrap{max-width:640px;margin:0 auto;padding:20px 16px 56px}
+  header{display:flex;align-items:center;gap:10px;padding:8px 0 18px}
+  .logo{width:30px;height:30px;flex:0 0 30px}
+  .brand{font-weight:800;letter-spacing:.02em}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:18px;overflow:hidden}
+  .photo{width:100%;aspect-ratio:4/5;object-fit:cover;display:block;background:#241b47}
+  .body{padding:16px}
+  h1{font-size:1.3rem;margin:0 0 8px}
+  .memo{white-space:pre-wrap;line-height:1.7;color:var(--text);margin:0 0 14px}
+  .meta{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px}
+  .chip{
+    font-size:.78rem;padding:5px 10px;border-radius:999px;
+    background:rgba(38,255,217,.10);border:1px solid rgba(38,255,217,.35);color:var(--neon)
+  }
+  .chip.plain{background:rgba(255,255,255,.06);border-color:var(--line);color:var(--muted)}
+  .actions{display:flex;flex-direction:column;gap:10px}
+  a.btn{
+    display:block;text-align:center;text-decoration:none;font-weight:700;
+    padding:13px 16px;border-radius:14px;
+  }
+  a.map{background:linear-gradient(135deg,var(--indigo),var(--cyan));color:#fff}
+  a.ghost{border:1px solid var(--line);color:var(--text)}
+  .state{padding:44px 8px;text-align:center;color:var(--muted);line-height:1.8}
+  footer{margin-top:26px;text-align:center;color:var(--muted);font-size:.78rem;line-height:2}
+  footer a{color:var(--muted)}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <svg class="logo" viewBox="0 0 24 24" aria-hidden="true">
+      <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0" stop-color="#6ce6f2"/><stop offset="1" stop-color="#a8a0fc"/>
+      </linearGradient></defs>
+      <path fill="url(#g)" d="M12 2c-4 0-7 3-7 7 0 5 7 13 7 13s7-8 7-13c0-4-3-7-7-7z"/>
+      <circle cx="12" cy="9" r="3.1" fill="#120a24"/>
+      <path fill="#8ff3ff" d="M12 6.9l.8 1.6 1.8.2-1.3 1.3.3 1.8-1.6-.9-1.6.9.3-1.8L9.4 8.7l1.8-.2z"/>
+    </svg>
+    <span class="brand">PinShare</span>
+  </header>
+
+  <div id="content"><div class="state">読み込んでいます…</div></div>
+
+  <footer>
+    <div><a href="./">PinShareについて</a> ・ <a href="./terms.html">利用規約</a></div>
+    <div>この場所はPinShareの利用者が公開した投稿です</div>
+  </footer>
+</div>
+
+<script>
+// 公開されている投稿だけを、Firestoreの読み取り専用APIから取り出して表示する。
+// サーバーは持たず、GitHub Pagesなどの静的ホスティングだけで動く。
+const PROJECT_ID = "pinshare-32af1";
+const API_KEY = "AIzaSyBZovlEhCHRWvx49Ly98nnood66JO_xI_s"; // 参照専用（Firestoreルールで公開投稿のみ許可）
+
+const params = new URLSearchParams(location.search);
+const pinId = params.get("p") || params.get("id");
+const routeId = params.get("r");
+const content = document.getElementById("content");
+
+function esc(s){ return (s||"").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c])); }
+
+// Firestoreの返す値は型付きなので、素の値へ直す
+function val(f){
+  if(!f) return null;
+  if("stringValue" in f) return f.stringValue;
+  if("integerValue" in f) return Number(f.integerValue);
+  if("doubleValue" in f) return Number(f.doubleValue);
+  if("booleanValue" in f) return f.booleanValue;
+  if("timestampValue" in f) return f.timestampValue;
+  if("arrayValue" in f) return (f.arrayValue.values||[]).map(val);
+  if("mapValue" in f) return Object.fromEntries(Object.entries(f.mapValue.fields||{}).map(([k,v])=>[k,val(v)]));
+  return null;
+}
+
+function showState(msg){ content.innerHTML = '<div class="state">'+msg+'</div>'; }
+
+async function fetchDoc(collection, id){
+  const url = `https://firestore.googleapis.com/v1/projects/${PROJECT_ID}/databases/(default)/documents/${collection}/${encodeURIComponent(id)}?key=${API_KEY}`;
+  const res = await fetch(url);
+  if(!res.ok) return null;
+  const json = await res.json();
+  if(!json.fields) return null;
+  return Object.fromEntries(Object.entries(json.fields).map(([k,v])=>[k,val(v)]));
+}
+
+function renderPin(pin){
+  if(pin.isPublic === false){ showState("この投稿は公開されていません。"); return; }
+
+  const name = pin.name || "名称のない場所";
+  const memo = pin.memo || "";
+  const lat = pin.latitude, lon = pin.longitude;
+  const photos = [].concat(pin.imageURLs || [], pin.imageURL ? [pin.imageURL] : []).filter(Boolean);
+  const photo = photos[0];
+  const category = pin.categoryName;
+  const likes = pin.likes;
+
+  document.title = name + " | PinShare";
+  document.getElementById("og-title").setAttribute("content", name);
+  if(memo) document.getElementById("og-desc").setAttribute("content", memo.slice(0,120));
+  if(photo) document.getElementById("og-image").setAttribute("content", photo);
+
+  const hasPlace = typeof lat === "number" && typeof lon === "number" && !(lat === 0 && lon === 0);
+  const mapsURL = hasPlace
+    ? `https://maps.apple.com/?ll=${lat},${lon}&q=${encodeURIComponent(name)}`
+    : null;
+  const googleURL = hasPlace
+    ? `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`
+    : null;
+
+  content.innerHTML = `
+    <div class="card">
+      ${photo ? `<img class="photo" src="${esc(photo)}" alt="${esc(name)}">` : ""}
+      <div class="body">
+        <h1>${esc(name)}</h1>
+        ${memo ? `<p class="memo">${esc(memo)}</p>` : ""}
+        <div class="meta">
+          ${category ? `<span class="chip">${esc(category)}</span>` : ""}
+          ${typeof likes === "number" ? `<span class="chip plain">♥ ${likes}</span>` : ""}
+          ${hasPlace ? "" : `<span class="chip plain">場所は非公開</span>`}
+        </div>
+        <div class="actions">
+          ${mapsURL ? `<a class="btn map" href="${mapsURL}">地図でこの場所を開く</a>` : ""}
+          ${googleURL ? `<a class="btn ghost" href="${googleURL}">Google マップで開く</a>` : ""}
+        </div>
+      </div>
+    </div>`;
+}
+
+function renderRoute(route, pins){
+  if(route.isPublic === false){ showState("このルートは公開されていません。"); return; }
+  const name = route.name || "名前のないルート";
+  document.title = name + " | PinShare";
+  document.getElementById("og-title").setAttribute("content", name);
+
+  const items = pins.map((p,i)=>{
+    if(!p) return "";
+    const has = typeof p.latitude === "number" && !(p.latitude===0 && p.longitude===0);
+    const link = has ? `https://maps.apple.com/?ll=${p.latitude},${p.longitude}&q=${encodeURIComponent(p.name||"")}` : null;
+    return `<li>${link ? `<a class="ghost" href="${link}" style="color:var(--text)">${esc(p.name||"")}</a>` : esc(p.name||"")}</li>`;
+  }).join("");
+
+  content.innerHTML = `
+    <div class="card"><div class="body">
+      <h1>${esc(name)}</h1>
+      ${route.comment ? `<p class="memo">${esc(route.comment)}</p>` : ""}
+      <ol style="line-height:2;padding-left:1.2em">${items}</ol>
+    </div></div>`;
+}
+
+(async () => {
+  try{
+    if(pinId){
+      const pin = await fetchDoc("pins", pinId);
+      if(!pin){ showState("投稿が見つかりませんでした。<br>削除されたか、公開されていない可能性があります。"); return; }
+      renderPin(pin);
+    } else if(routeId){
+      const route = await fetchDoc("routes", routeId);
+      if(!route){ showState("ルートが見つかりませんでした。"); return; }
+      const ids = route.pinIds || [];
+      const pins = await Promise.all(ids.map(id => fetchDoc("pins", id)));
+      renderRoute(route, pins);
+    } else {
+      showState("PinShareで見つけた場所を共有するページです。<br>共有リンクから開いてください。");
+    }
+  }catch(e){
+    showState("読み込みに失敗しました。時間をおいて開き直してください。");
+  }
+})();
+</script>
+</body>
+</html>
