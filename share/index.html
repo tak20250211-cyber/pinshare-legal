@@ -160,7 +160,9 @@ function renderRoute(route, pins){
   document.getElementById("og-title").setAttribute("content", name);
 
   const items = pins.map((p,i)=>{
-    if(!p) return "";
+    // 非公開・削除済みのスポットは中身を出せない。黙って抜くと順番がずれるので
+    // 「見られない場所がある」ことだけ残す
+    if(!p) return `<li style="color:var(--muted)">非公開の場所</li>`;
     const has = typeof p.latitude === "number" && !(p.latitude===0 && p.longitude===0);
     const link = has ? `https://maps.apple.com/?ll=${p.latitude},${p.longitude}&q=${encodeURIComponent(p.name||"")}` : null;
     return `<li>${link ? `<a class="ghost" href="${link}" style="color:var(--text)">${esc(p.name||"")}</a>` : esc(p.name||"")}</li>`;
