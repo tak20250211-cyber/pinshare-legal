@@ -22,10 +22,18 @@
   .sub { font-size: .85rem; color: rgba(255,255,255,.6); margin: 0 0 20px; }
   label { display: block; font-size: .8rem; color: rgba(255,255,255,.7); }
   input {
-    width: 100%; padding: 13px 14px; margin: 6px 0 14px; font-size: 1rem;
+    width: 100%; padding: 13px 44px 13px 14px; margin: 6px 0 14px; font-size: 1rem;
     border-radius: 12px; border: 1px solid rgba(255,255,255,.18);
     background: rgba(0,0,0,.25); color: #fff;
   }
+  /* パスワードの表示・非表示を切り替える目のマーク */
+  .field { position: relative; }
+  .eye {
+    position: absolute; right: 6px; top: 2px; width: 38px; height: 46px;
+    display: flex; align-items: center; justify-content: center;
+    background: none; border: 0; padding: 0; width: 38px; cursor: pointer;
+  }
+  .eye svg { width: 22px; height: 22px; stroke: rgba(255,255,255,.6); fill: none; stroke-width: 1.7; }
   button {
     width: 100%; padding: 15px; font-size: 1rem; font-weight: 700; color: #fff;
     border: 0; border-radius: 999px; cursor: pointer;
@@ -46,9 +54,15 @@
 
   <div id="form">
     <label for="pw1">新しいパスワード（6文字以上）</label>
-    <input id="pw1" type="password" autocomplete="new-password" autocapitalize="off">
+    <div class="field">
+      <input id="pw1" type="password" autocomplete="new-password" autocapitalize="off">
+      <button type="button" class="eye" data-for="pw1" aria-label="パスワードを表示"><svg viewBox="0 0 24 24"><path d="M1.5 12S5.5 5.5 12 5.5 22.5 12 22.5 12 18.5 18.5 12 18.5 1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3.2"/></svg></button>
+    </div>
     <label for="pw2">もう一度</label>
-    <input id="pw2" type="password" autocomplete="new-password" autocapitalize="off">
+    <div class="field">
+      <input id="pw2" type="password" autocomplete="new-password" autocapitalize="off">
+      <button type="button" class="eye" data-for="pw2" aria-label="パスワードを表示"><svg viewBox="0 0 24 24"><path d="M1.5 12S5.5 5.5 12 5.5 22.5 12 22.5 12 18.5 18.5 12 18.5 1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3.2"/></svg></button>
+    </div>
     <button id="go">この内容で決定する</button>
     <p class="note">
       決定したら、PinShare のアプリに戻って新しいパスワードでログインしてください。<br>
@@ -125,6 +139,19 @@ async function callAuth(body) {
   }
   if (json.email) who.textContent = json.email + " の新しいパスワードを決めてください";
 })();
+
+// 目のマーク：入力した文字を見せる／隠す
+const EYE_OPEN = '<svg viewBox="0 0 24 24"><path d="M1.5 12S5.5 5.5 12 5.5 22.5 12 22.5 12 18.5 18.5 12 18.5 1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3.2"/></svg>';
+const EYE_OFF = '<svg viewBox="0 0 24 24"><path d="M1.5 12S5.5 5.5 12 5.5 22.5 12 22.5 12 18.5 18.5 12 18.5 1.5 12 1.5 12z"/><circle cx="12" cy="12" r="3.2"/><path d="M3 21 21 3"/></svg>';
+document.querySelectorAll(".eye").forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const input = document.getElementById(btn.dataset.for);
+    const showing = input.type === "text";
+    input.type = showing ? "password" : "text";
+    btn.innerHTML = showing ? EYE_OPEN : EYE_OFF;
+    btn.setAttribute("aria-label", showing ? "パスワードを表示" : "パスワードを隠す");
+  });
+});
 
 document.getElementById("go").addEventListener("click", async () => {
   const pw1 = document.getElementById("pw1").value;
