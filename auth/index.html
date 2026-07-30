@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PinShare パスワードの再設定</title>
+<style>
+  :root { --indigo:#4f5cf2; --cyan:#22c7e6; --ink:#1b1d26; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: -apple-system, "Hiragino Sans", "Yu Gothic", sans-serif;
+    margin: 0; min-height: 100vh; color: #fff;
+    background: linear-gradient(160deg, #0d1030 0%, #16224d 60%, #0b1b3a 100%);
+    display: flex; align-items: center; justify-content: center; padding: 24px;
+  }
+  .card {
+    width: 100%; max-width: 420px; background: rgba(255,255,255,0.07);
+    border: 1px solid rgba(255,255,255,0.14); border-radius: 22px; padding: 26px 22px 28px;
+    backdrop-filter: blur(12px);
+  }
+  h1 { font-size: 1.25rem; margin: 0 0 6px; }
+  .sub { font-size: .85rem; color: rgba(255,255,255,.6); margin: 0 0 20px; }
+  label { display: block; font-size: .8rem; color: rgba(255,255,255,.7); }
+  input {
+    width: 100%; padding: 13px 14px; margin: 6px 0 14px; font-size: 1rem;
+    border-radius: 12px; border: 1px solid rgba(255,255,255,.18);
+    background: rgba(0,0,0,.25); color: #fff;
+  }
+  button {
+    width: 100%; padding: 15px; font-size: 1rem; font-weight: 700; color: #fff;
+    border: 0; border-radius: 999px; cursor: pointer;
+    background: linear-gradient(120deg, var(--indigo), var(--cyan));
+  }
+  button[disabled] { opacity: .5; }
+  .note { font-size: .78rem; color: rgba(255,255,255,.55); margin-top: 14px; line-height: 1.7; }
+  .msg { margin-top: 16px; padding: 12px 14px; border-radius: 12px; font-size: .86rem; line-height: 1.7; }
+  .msg.err { background: rgba(255,90,80,.18); border: 1px solid rgba(255,90,80,.4); }
+  .msg.ok { background: rgba(60,220,150,.16); border: 1px solid rgba(60,220,150,.4); }
+  .hide { display: none; }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>パスワードの再設定</h1>
+  <p class="sub" id="who">新しいパスワードを決めてください</p>
+
+  <div id="form">
+    <label for="pw1">新しいパスワード（6文字以上）</label>
+    <input id="pw1" type="password" autocomplete="new-password" autocapitalize="off">
+    <label for="pw2">もう一度</label>
+    <input id="pw2" type="password" autocomplete="new-password" autocapitalize="off">
+    <button id="go">この内容で決定する</button>
+    <p class="note">
+      決定したら、PinShare のアプリに戻って新しいパスワードでログインしてください。<br>
+      このページのリンクは、メールが届いてから1時間だけ有効です。
+    </p>
+  </div>
+
+  <div id="msg" class="msg hide"></div>
+</div>
+
+<script>
+// PinShare のパスワード再設定ページ。
+// Firebase の英語ページの代わりに、これをメールのリンク先にしている。
+// 何が起きたのか日本語で正確に伝えるのが目的（英語ページは理由が「期限切れか使用済み」しか出ない）。
+const WEB_API_KEY = "AIzaSyCgU1XAG859W_XnBrAv7n-YgVvP4_jJFFU"; // ブラウザ用のキー（リファラ制限つき）
+const params = new URLSearchParams(location.search);
+const oobCode = params.get("oobCode");
+const mode = params.get("mode") || "resetPassword";
+
+const form = document.getElementById("form");
+const msgBox = document.getElementById("msg");
+const who = document.getElementById("who");
+
+function show(kind, html) {
+  msgBox.className = "msg " + kind;
+  msgBox.innerHTML = html;
+  msgBox.classList.remove("hide");
+}
+function hideForm() { form.classList.add("hide"); }
+
+const AGAIN = "アプリを開いて「パスワードを忘れた場合」をもう一度押し、<b>いちばん新しいメール</b>のリンクを開いてください。";
+
+function japanese(code) {
+  if (!code) return "うまくいきませんでした。時間をおいてもう一度お試しください。";
+  if (code.startsWith("EXPIRED_OOB_CODE"))
+    return "このリンクは<b>有効期限（1時間）が切れています</b>。<br>" + AGAIN;
+  if (code.startsWith("INVALID_OOB_CODE"))
+    return "このリンクは<b>もう使えません</b>。すでに使用済みか、あとから新しいメールを送ったため無効になっています（有効なのは最後に届いた1通だけです）。<br>" + AGAIN;
+  if (code.startsWith("WEAK_PASSWORD"))
+    return "パスワードが短すぎます。<b>6文字以上</b>にしてください。";
+  if (code.startsWith("USER_DISABLED"))
+    return "このアカウントは利用できない状態です。お問い合わせください（tak20250211@gmail.com）。";
+  if (code.startsWith("API_KEY") || code.includes("PERMISSION_DENIED"))
+    return "設定の問題で処理できませんでした。お手数ですが運営（tak20250211@gmail.com）までご連絡ください。";
+  return "うまくいきませんでした（" + code + "）。<br>" + AGAIN;
+}
+
+async function callAuth(body) {
+  const res = await fetch(
+    "https://identitytoolkit.googleapis.com/v1/accounts:resetPassword?key=" + WEB_API_KEY,
+    { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) }
+  );
+  const json = await res.json().catch(() => ({}));
+  return { ok: res.ok, json };
+}
+
+// 開いた時点でリンクの有効性を確かめ、宛先のメールアドレスを出す
+(async () => {
+  if (mode !== "resetPassword") {
+    hideForm();
+    show("err", "このページはパスワードの再設定用です。アプリから操作をやり直してください。");
+    return;
+  }
+  if (!oobCode) {
+    hideForm();
+    show("err", "リンクの情報が足りません。<br>" + AGAIN);
+    return;
+  }
+  const { ok, json } = await callAuth({ oobCode });
+  if (!ok) {
+    hideForm();
+    show("err", japanese(json.error && json.error.message));
+    return;
+  }
+  if (json.email) who.textContent = json.email + " の新しいパスワードを決めてください";
+})();
+
+document.getElementById("go").addEventListener("click", async () => {
+  const pw1 = document.getElementById("pw1").value;
+  const pw2 = document.getElementById("pw2").value;
+  if (pw1.length < 6) { show("err", "パスワードは<b>6文字以上</b>にしてください。"); return; }
+  if (pw1 !== pw2) { show("err", "2つのパスワードが一致していません。"); return; }
+
+  const button = document.getElementById("go");
+  button.disabled = true;
+  button.textContent = "変更しています…";
+  const { ok, json } = await callAuth({ oobCode, newPassword: pw1 });
+  button.disabled = false;
+  button.textContent = "この内容で決定する";
+
+  if (!ok) {
+    show("err", japanese(json.error && json.error.message));
+    return;
+  }
+  hideForm();
+  show("ok", "<b>パスワードを変更しました。</b><br>PinShare のアプリに戻って、新しいパスワードでログインしてください。");
+});
+</script>
+</body>
+</html>
